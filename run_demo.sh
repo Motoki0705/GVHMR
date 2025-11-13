@@ -1,0 +1,1 @@
+uv run tools/demo/demo_multi.py --video inputs/demo/tennis_clip.mp4 -s

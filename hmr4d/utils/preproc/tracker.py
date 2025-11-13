@@ -14,6 +14,7 @@ from hmr4d.utils.seq_utils import (
 )
 from hmr4d.utils.video_io_utils import get_video_lwh
 from hmr4d.utils.net_utils import moving_average_smooth
+from hmr4d.utils.ui import select_track_ids
 
 
 class Tracker:
@@ -72,24 +73,41 @@ class Tracker:
 
         return id_to_frame_ids, id_to_bbx_xyxys, id_sorted
 
-    def get_one_track(self, video_path):
-        # track
-        track_history = self.track(video_path)
+    def _build_track_tensor(self, frame_ids, bbx_xyxys, num_frames):
+        frame_ids = torch.tensor(frame_ids)
+        bbx_xyxys = torch.tensor(bbx_xyxys)
+        mask = frame_id_to_mask(frame_ids, num_frames)
+        bbx_xyxy_track = rearrange_by_mask(bbx_xyxys, mask)
+        missing_frame_id_list = get_frame_id_list_from_mask(~mask)
+        bbx_xyxy_track = linear_interpolate_frame_ids(bbx_xyxy_track, missing_frame_id_list)
+        assert (bbx_xyxy_track.sum(1) != 0).all()
+        bbx_xyxy_track = moving_average_smooth(bbx_xyxy_track, window_size=5, dim=0)
+        bbx_xyxy_track = moving_average_smooth(bbx_xyxy_track, window_size=5, dim=0)
+        return bbx_xyxy_track
 
-        # parse track_history & use top1 track
+    def get_one_track(self, video_path):
+        track_history = self.track(video_path)
         id_to_frame_ids, id_to_bbx_xyxys, id_sorted = self.sort_track_length(track_history, video_path)
         track_id = id_sorted[0]
-        frame_ids = torch.tensor(id_to_frame_ids[track_id])  # (N,)
-        bbx_xyxys = torch.tensor(id_to_bbx_xyxys[track_id])  # (N, 4)
-
-        # interpolate missing frames
-        mask = frame_id_to_mask(frame_ids, get_video_lwh(video_path)[0])
-        bbx_xyxy_one_track = rearrange_by_mask(bbx_xyxys, mask)  # (F, 4), missing filled with 0
-        missing_frame_id_list = get_frame_id_list_from_mask(~mask)  # list of list
-        bbx_xyxy_one_track = linear_interpolate_frame_ids(bbx_xyxy_one_track, missing_frame_id_list)
-        assert (bbx_xyxy_one_track.sum(1) != 0).all()
-
-        bbx_xyxy_one_track = moving_average_smooth(bbx_xyxy_one_track, window_size=5, dim=0)
-        bbx_xyxy_one_track = moving_average_smooth(bbx_xyxy_one_track, window_size=5, dim=0)
-
+        bbx_xyxy_one_track = self._build_track_tensor(
+            id_to_frame_ids[track_id],
+            id_to_bbx_xyxys[track_id],
+            get_video_lwh(video_path)[0],
+        )
         return bbx_xyxy_one_track
+
+    def get_multi_track(self, video_path):
+        track_history = self.track(video_path)
+        id_to_frame_ids, id_to_bbx_xyxys, id_sorted = self.sort_track_length(track_history, video_path)
+        selected_ids = select_track_ids(track_history, video_path, id_sorted)
+        num_frames = get_video_lwh(video_path)[0]
+        multi_track = {}
+        for track_id in selected_ids:
+            if track_id not in id_to_frame_ids:
+                continue
+            bbx_xyxy_track = self._build_track_tensor(id_to_frame_ids[track_id], id_to_bbx_xyxys[track_id], num_frames)
+            multi_track[int(track_id)] = bbx_xyxy_track
+
+        if not multi_track:
+            raise RuntimeError("No valid tracks selected for multi-person inference.")
+        return multi_track

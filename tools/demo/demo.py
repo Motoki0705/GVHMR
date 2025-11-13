@@ -32,6 +32,17 @@ from tqdm import tqdm
 from hmr4d.utils.geo_transform import apply_T_on_points, compute_T_ayfz2ay
 from einops import einsum, rearrange
 
+# --- Torch 2.6+ の "weights_only=True" 既定への互換処理（Ultralyticsの重み読み込み用） ---
+from ultralytics.nn import tasks as _utasks
+import torch
+def _torch_safe_load(file):
+    # 公式の .pt を使う前提で weights_only=False で読み込む
+    ckpt = torch.load(file, map_location="cpu", weights_only=False)
+    return ckpt, str(file)  # ★ Ultralytics 側が (ckpt, weight) の2値を期待
+_utasks.torch_safe_load = _torch_safe_load
+# --------------------------------------------------------------------------------------------
+
+
 
 CRF = 23  # 17 is lossless, every +6 halves the mp4 size
 
