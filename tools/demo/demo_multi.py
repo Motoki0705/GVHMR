@@ -322,75 +322,7 @@ def render_incam_multi(cfg, sequences: Dict[int, PersonSequence], faces_smpl: to
             reader.close()
         except Exception:
             pass
-
-def _prepare_virtual_view_specs(views_cfg) -> List[CourtViewSpec]:
-    raw_views = OmegaConf.to_container(views_cfg, resolve=True)
-    if raw_views is None:
-        return []
-    if isinstance(raw_views, dict):
-        normalized = []
-        for name, payload in raw_views.items():
-            if payload is None:
-                continue
-            if not isinstance(payload, dict):
-                raise TypeError(f"View specification for '{name}' must be a mapping.")
-            entry = {"name": name, **payload}
-            normalized.append(entry)
-        raw_views = normalized
-    if not isinstance(raw_views, list):
-        raise TypeError("Virtual court views must be provided as a list or mapping.")
-    return parse_view_specs(raw_views)
-
-
-def render_court_system_not_overlay(
-    cfg,
-    sequences: Dict[int, PersonSequence],
-    faces_smpl: torch.Tensor,
-) -> None:
-    if not hasattr(cfg, "court_virtual_render"):
-        Log.info("[Court Virtual] No configuration found; skipping virtual rendering.")
-        return
-
-    virtual_cfg = cfg.court_virtual_render
-    if not getattr(virtual_cfg, "enabled", False):
-        Log.info("[Court Virtual] Disabled via configuration.")
-        return
-
-    views_cfg = getattr(virtual_cfg, "views", None)
-    if not views_cfg:
-        Log.warn("[Court Virtual] 'views' configuration missing; skipping virtual rendering.")
-        return
-
-    view_specs = _prepare_virtual_view_specs(views_cfg)
-    if not view_specs:
-        Log.warn("[Court Virtual] No valid view specifications parsed; skipping virtual rendering.")
-        return
-
-    missing_tracks = [seq.track_id for seq in sequences.values() if seq.verts_court is None]
-    if missing_tracks:
-        raise RuntimeError(
-            f"Virtual court rendering requires court coordinates for all tracks. Missing tracks: {missing_tracks}"
-        )
-
-    track_vertices = {track_id: seq.verts_court for track_id, seq in sequences.items()}
-    colors_rgb = {}
-    for track_id, color in assign_track_colors(sequences.keys()).items():
-        colors_rgb[track_id] = [float(c) / 255.0 for c in color]
-
-    output_dir = Path(getattr(virtual_cfg, "output_dir", Path(cfg.output_dir) / "court_virtual"))
-    fps = int(getattr(virtual_cfg, "fps", 30))
-    crf = int(getattr(virtual_cfg, "crf", CRF))
-
-    render_virtual_court_scene(
-        track_vertices=track_vertices,
-        faces=faces_smpl,
-        track_colors=colors_rgb,
-        views=view_specs,
-        output_dir=output_dir,
-        fps=fps,
-        crf=crf,
-        device="cuda",
-    )
+        
 
 def run_prediction_for_person(cfg, person_paths: PersonPaths, model: DemoPL):
     if person_paths.hmr4d_results.exists():
