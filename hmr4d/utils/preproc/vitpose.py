@@ -11,13 +11,30 @@ from hmr4d.utils.geo.flip_utils import flip_heatmap_coco17
 
 
 class VitPoseExtractor:
-    def __init__(self, tqdm_leave=True):
-        ckpt_path = "inputs/checkpoints/vitpose/vitpose-h-multi-coco.pth"
-        self.pose = build_model("ViTPose_huge_coco_256x192", ckpt_path)
-        self.pose.cuda().eval()
+    def __init__(
+        self,
+        tqdm_leave: bool = True,
+        checkpoint_path: str | None = None,
+        device: str = "cuda",
+        flip_test: bool = True,
+    ):
+        """Initialize ViTPose extractor.
 
-        self.flip_test = True
+        Args:
+            tqdm_leave: Leave tqdm progress bars.
+            checkpoint_path: Path to ViTPose checkpoint. If None, use default.
+            device: Inference device.
+            flip_test: Enable flip-test inference.
+
+        """
+        if checkpoint_path is None:
+            checkpoint_path = "inputs/checkpoints/vitpose/vitpose-h-multi-coco.pth"
+        self.pose = build_model("ViTPose_huge_coco_256x192", checkpoint_path)
+        self.pose.to(device).eval()
+
+        self.flip_test = flip_test
         self.tqdm_leave = tqdm_leave
+        self.device = device
 
     @torch.no_grad()
     def extract(self, video_path, bbx_xys, img_ds=0.5):
@@ -34,7 +51,7 @@ class VitPoseExtractor:
         vitpose = []
         for j in tqdm(range(0, L, batch_size), desc="ViTPose", leave=self.tqdm_leave):
             # Heat map
-            imgs_batch = imgs[j : j + batch_size, :, :, 32:224].cuda()
+            imgs_batch = imgs[j : j + batch_size, :, :, 32:224].to(self.device)
             if self.flip_test:
                 heatmap, heatmap_flipped = self.pose(torch.cat([imgs_batch, imgs_batch.flip(3)], dim=0)).chunk(2)
                 heatmap_flipped = flip_heatmap_coco17(heatmap_flipped)

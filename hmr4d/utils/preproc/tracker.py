@@ -18,15 +18,32 @@ from hmr4d.utils.ui import select_track_ids
 
 
 class Tracker:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        yolo_checkpoint: str | None = None,
+        device: str = "cuda",
+        conf: float = 0.5,
+    ) -> None:
+        """Initialize YOLO-based tracker.
+
+        Args:
+            yolo_checkpoint: Path to YOLO checkpoint. If None, use default.
+            device: Inference device.
+            conf: Detection confidence threshold.
+
+        """
         # https://docs.ultralytics.com/modes/predict/
-        self.yolo = YOLO(PROJ_ROOT / "inputs/checkpoints/yolo/yolov8x.pt")
+        if yolo_checkpoint is None:
+            yolo_checkpoint = str(PROJ_ROOT / "inputs/checkpoints/yolo/yolov8x.pt")
+        self.yolo = YOLO(yolo_checkpoint)
+        self.device = device
+        self.conf = conf
 
     def track(self, video_path):
         track_history = []
         cfg = {
-            "device": "cuda",
-            "conf": 0.5,  # default 0.25, wham 0.5
+            "device": self.device,
+            "conf": self.conf,  # default 0.25, wham 0.5
             "classes": 0,  # human
             "verbose": False,
             "stream": True,

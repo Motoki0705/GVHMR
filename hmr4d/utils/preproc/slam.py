@@ -16,10 +16,26 @@ from hmr4d.utils.geo.hmr_cam import estimate_focal_length
 
 
 class SLAMModel(object):
-    def __init__(self, video_path, width, height, intrinsics=None, stride=1, skip=0, buffer=2048, resize=0.5):
+    def __init__(
+        self,
+        video_path,
+        width,
+        height,
+        intrinsics=None,
+        stride=1,
+        skip=0,
+        buffer=2048,
+        resize=0.5,
+        dpvo_config_path: str | None = None,
+        dpvo_checkpoint_path: str | None = None,
+        start_reader: bool = True,
+    ):
         """
         Args:
             intrinsics: [fx, fy, cx, cy]
+            dpvo_config_path: Path to DPVO config YAML.
+            dpvo_checkpoint_path: Path to DPVO checkpoint.
+            start_reader: Start the video reader process.
         """
         if intrinsics is None:
             print("Estimating focal length")
@@ -28,15 +44,25 @@ class SLAMModel(object):
         else:
             intrinsics = intrinsics.clone()
 
-        self.dpvo_cfg = str(PROJ_ROOT / "third-party/DPVO/config/default.yaml")
-        self.dpvo_ckpt = "inputs/checkpoints/dpvo/dpvo.pth"
+        if dpvo_config_path is None:
+            dpvo_config_path = PROJ_ROOT / "third-party/DPVO/config/default.yaml"
+        if dpvo_checkpoint_path is None:
+            dpvo_checkpoint_path = "inputs/checkpoints/dpvo/dpvo.pth"
+
+        self.dpvo_cfg = str(dpvo_config_path)
+        self.dpvo_ckpt = str(dpvo_checkpoint_path)
 
         self.buffer = buffer
         self.times = []
         self.slam = None
         self.queue = Queue(maxsize=8)
-        self.reader = Process(target=video_stream, args=(self.queue, video_path, intrinsics, stride, skip, resize))
-        self.reader.start()
+        self.reader = None
+        if start_reader:
+            self.reader = Process(
+                target=video_stream,
+                args=(self.queue, video_path, intrinsics, stride, skip, resize),
+            )
+            self.reader.start()
 
     def track(self):
         (t, image, intrinsics) = self.queue.get()
