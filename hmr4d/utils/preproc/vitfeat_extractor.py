@@ -1,5 +1,5 @@
 import torch
-from hmr4d.network.hmr2 import load_hmr2, HMR2
+from hmr4d.network.hmr2 import HMR2A_CKPT, HMR2, load_hmr2
 
 
 from hmr4d.utils.video_io_utils import read_video_np
@@ -72,6 +72,8 @@ class Extractor:
             device: Inference device.
 
         """
+        if checkpoint_path is None:
+            checkpoint_path = str(HMR2A_CKPT)
         self.extractor: HMR2 = load_hmr2(checkpoint_path).to(device).eval()
         self.tqdm_leave = tqdm_leave
         self.device = device
